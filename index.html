@@ -1,0 +1,1434 @@
+import React, { useState, useEffect } from 'react';
+
+// --- SOUND ENGINE (Web Audio API) ---
+const playSound = (type) => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    if (type === 'correct') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } else if (type === 'wrong') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'victory') {
+      const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+      notes.forEach((freq, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.12);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime + index * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + index * 0.12 + 0.4);
+        osc.start(ctx.currentTime + index * 0.12);
+        osc.stop(ctx.currentTime + index * 0.12 + 0.4);
+      });
+    } else if (type === 'defeat') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(80, ctx.currentTime + 0.8);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.8);
+    }
+  } catch (e) {
+    console.log("AudioContext disekat atau tidak disokong");
+  }
+};
+
+// --- DATA & KONFIGURASI ---
+const REGIONS = [
+  { 
+    id: 1, 
+    name: "Hutan Aritmatika", 
+    desc: "Mulai petualangan di rimba hijau & rawa penjumlahan untuk mengumpulkan kunci kuno angka dasar.", 
+    min: 1, 
+    max: 15, 
+    theme: "from-emerald-950 via-teal-900 to-green-950", 
+    cardTheme: "from-emerald-500 to-teal-700",
+    icon: "🌲", 
+    accent: "text-emerald-400",
+    shadow: "shadow-emerald-500/30",
+    posX: "18%",
+    posY: "72%",
+    groundColor: "bg-gradient-to-br from-[#84cc16] to-[#4d7c0f]", 
+    shoreColor: "border-[#fef08a]", 
+    deco: ["🌲", "🏡", "🌳", "🌲"]
+  },
+  { 
+    id: 2, 
+    name: "Dimensi Bilangan", 
+    desc: "Menuruni kawah vulkanik bilangan bulat yang ekstrem & mendaki kuil kristal pecahan es.", 
+    min: 16, 
+    max: 30, 
+    theme: "from-purple-950 via-violet-900 to-indigo-950", 
+    cardTheme: "from-purple-500 to-indigo-700",
+    icon: "🌋", 
+    accent: "text-purple-400",
+    shadow: "shadow-purple-500/30",
+    posX: "34%",
+    posY: "38%",
+    groundColor: "bg-gradient-to-br from-[#a855f7] to-[#581c87]", 
+    shoreColor: "border-[#f472b6]", 
+    deco: ["🌋", "💎", "❄️", "🌲"]
+  },
+  { 
+    id: 3, 
+    name: "Lembah Aljabar", 
+    desc: "Memecahkan teka-teki sirkuit kuno & gerbang sihir rahasia pencarian variabel x misterius.", 
+    min: 31, 
+    max: 32, 
+    theme: "from-blue-950 via-sky-900 to-slate-900", 
+    cardTheme: "from-blue-500 to-sky-700",
+    icon: "🔮", 
+    accent: "text-sky-400",
+    shadow: "shadow-blue-500/30",
+    posX: "54%",
+    posY: "66%",
+    groundColor: "bg-gradient-to-br from-[#0ea5e9] to-[#1e3a8a]", 
+    shoreColor: "border-[#bae6fd]", 
+    deco: ["🔮", "⚡", "🏡", "🌳"]
+  },
+  { 
+    id: 4, 
+    name: "Gurun Perbandingan", 
+    desc: "Berdagang bijak di pasar gurun yang terik & mengendalikan gerbang pasir dengan proporsi tepat.", 
+    min: 33, 
+    max: 35, 
+    theme: "from-amber-950 via-orange-900 to-yellow-950", 
+    cardTheme: "from-amber-500 to-orange-600",
+    icon: "⚖️", 
+    accent: "text-amber-400",
+    shadow: "shadow-amber-500/30",
+    posX: "74%",
+    posY: "32%",
+    groundColor: "bg-gradient-to-br from-[#fbbf24] to-[#b45309]", 
+    shoreColor: "border-[#fef08a]", 
+    deco: ["🐪", "⚖️", "🏺", "☀️"]
+  },
+  { 
+    id: 5, 
+    name: "Istana Geometri", 
+    desc: "Istana megah terapung dengan arsitektur ubin simetris pelindung singgasana lingkaran sihir.", 
+    min: 36, 
+    max: 40, 
+    theme: "from-rose-950 via-red-900 to-stone-950", 
+    cardTheme: "from-rose-500 to-red-700",
+    icon: "🏰", 
+    accent: "text-rose-400",
+    shadow: "shadow-rose-500/30",
+    posX: "90%",
+    posY: "18%",
+    groundColor: "bg-gradient-to-br from-[#f43f5e] to-[#9f1239]", 
+    shoreColor: "border-[#fecdd3]", 
+    deco: ["🏰", "📐", "👑", "🌲"]
+  }
+];
+
+const LEVEL_NAMES = {
+  1: "Gerbang Penjumlahan I (Satuan + Satuan)", 
+  2: "Gerbang Penjumlahan II (Puluhan + Satuan/Puluhan)", 
+  3: "Gerbang Penjumlahan III (Ratusan + Puluhan/Ratusan)",
+  4: "Rawa Pengurangan I (Satuan - Satuan)", 
+  5: "Rawa Pengurangan II (Puluhan - Satuan/Puluhan)", 
+  6: "Rawa Pengurangan III (Ratusan - Puluhan/Ratusan)",
+  7: "Labirin Perkalian I (Satuan x Satuan)", 
+  8: "Labirin Perkalian II (Puluhan x Satuan/Puluhan)", 
+  9: "Labirin Perkalian III (Ratusan x Puluhan/Ratusan)",
+  10: "Air Terjun Pembagian I (Puluhan : Satuan = Satuan)", 
+  11: "Air Terjun Pembagian II (Ratusan : Satuan/Puluhan = Satuan/Puluhan)", 
+  12: "Air Terjun Pembagian III (Ribuan : Satuan/Puluhan = Puluhan/Ratusan)",
+  13: "Benteng Campuran I (Campuran Satuan)", 
+  14: "Benteng Campuran II (Campuran Satuan & Puluhan)", 
+  15: "💀 [BOSS] KUKURUNDA (Campuran Satuan, Puluhan & Ratusan)",
+  16: "Penjumlahan Bilangan Bulat", 17: "Penjumlahan Bulat (Soal Cerita)",
+  18: "Pengurangan Bilangan Bulat", 19: "Pengurangan Bulat (Soal Cerita)",
+  20: "Perkalian Bilangan Bulat", 21: "Perkalian Bulat (Soal Cerita)",
+  22: "Pembagian Bilangan Bulat", 23: "Pembagian Bulat (Soal Cerita)",
+  24: "Campuran Bilangan Bulat", 25: "🛡️ [MINI BOSS] Campuran Bulat (Cerita)",
+  26: "Jembatan Pecahan (+)", 27: "Jembatan Pecahan (-)",
+  28: "Kebun Pecahan (x)", 29: "Kebun Pecahan (:)", 30: "💀 [BOSS] Penguasa Kristal Pecahan",
+  31: "Teka-teki 1 Variabel I", 32: "Teka-teki 1 Variabel II",
+  33: "Pasar Gurun (Perbandingan Senilai)", 
+  34: "Oasis Waktu (Perbandingan Berbalik Nilai)", 
+  35: "🛡️ [MINI BOSS] Ujian Firaun (Perbandingan Campuran)",
+  36: "Kamar Persegi (Luas & Keliling)", 
+  37: "Aula Persegi Panjang (Luas & Keliling)", 
+  38: "Menara Segitiga (Luas & Keliling)", 
+  39: "Taman Trapesium (Luas & Keliling)", 
+  40: "💀 [FINAL BOSS] Singgasana Lingkaran (Luas & Keliling)"
+};
+
+const ENEMIES = {
+  normal: [
+    { name: "Slime Angka", emoji: "🟩" },
+    { name: "Goblins Pengurang", emoji: "👺" },
+    { name: "Serigala Kelipatan", emoji: "🐺" },
+    { name: "Robot Pembagi", emoji: "🤖" },
+    { name: "Kelelawar Minus", emoji: "🦇" }
+  ],
+  boss: {
+    15: { name: "Raja KUKURUNDA", emoji: "👹", desc: "Dewa Tertinggi Hitung Campuran!" },
+    25: { name: "Golem Bilangan Bulat", emoji: "🪨", desc: "Monster Batu Suhu Ekstrem!" },
+    30: { name: "Ratu Kristal Pecahan", emoji: "🔮", desc: "Penguasa Belahan Dimensi Es!" },
+    35: { name: "Firaun Rasio", emoji: "🧟", desc: "Penjaga Neraca Keadilan Kuno!" },
+    40: { name: "Naga Geometri", emoji: "🐉", desc: "Raja Terakhir Pelindung Singgasana Lingkaran!" }
+  }
+};
+
+const AVATARS = [
+  { id: "knight", name: "Ksatria Aritmatika", emoji: "🛡️" },
+  { id: "wizard", name: "Penyihir Aljabar", emoji: "🧙‍♂️" },
+  { id: "monster", name: "Monster Aritmatika", emoji: "👾" }
+];
+
+// --- LOGIKA GENERATOR SOAL ---
+const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+
+// Bantuan untuk menyederhanakan Pecahan Dinamis
+const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+const simplify = (n, d) => {
+  let divisor = gcd(Math.abs(n), Math.abs(d));
+  n = n / divisor;
+  d = d / divisor;
+  if (d < 0) { n = -n; d = -d; }
+  if (d === 1) return `${n}`;
+  if (n === 0) return `0`;
+  return `${n}/${d}`;
+};
+
+// Bantuan untuk membuat 4 pilihan ganda unik khusus format Pecahan (String)
+const makeUniqueOptions = (ansStr, ...fakes) => {
+    let res = new Set([ansStr]);
+    for (let f of fakes) {
+        if (res.size < 4) res.add(f);
+    }
+    let fallbacks = ["1/2", "3/4", "1/3", "2/3", "1/4", "2/5", "1", "2", "3", "3/2", "4/3", "5/4"];
+    let i = 0;
+    while(res.size < 4 && i < fallbacks.length) {
+        res.add(fallbacks[i]);
+        i++;
+    }
+    return Array.from(res);
+};
+
+const generateQuestion = (level) => {
+  let q = "", ans = 0, options = [];
+  
+  if (level === 1) {
+    // Penjumlahan satuan dengan satuan
+    let a = rand(1, 9), b = rand(1, 9);
+    q = `Berapa hasil dari ${a} + ${b}?`; 
+    ans = a + b;
+  } else if (level === 2) {
+    // Penjumlahan puluhan dengan satuan atau puluhan
+    let a = rand(10, 99);
+    let b = (rand(0, 1) === 1) ? rand(10, 99) : rand(1, 9);
+    q = `Berapa hasil dari ${a} + ${b}?`; 
+    ans = a + b;
+  } else if (level === 3) {
+    // Penjumlahan ratusan dengan puluhan atau ratusan
+    let a = rand(100, 999);
+    let b = (rand(0, 1) === 1) ? rand(100, 999) : rand(10, 99);
+    q = `Berapa hasil dari ${a} + ${b}?`; 
+    ans = a + b;
+  } else if (level === 4) {
+    // Pengurangan satuan dengan satuan (Harus positif bulat)
+    let a = rand(2, 9);
+    let b = rand(1, a - 1);
+    q = `Berapa hasil dari ${a} - ${b}?`; 
+    ans = a - b;
+  } else if (level === 5) {
+    // Pengurangan puluhan dengan satuan atau puluhan (Harus positif bulat)
+    let a = rand(10, 99);
+    let b = (rand(0, 1) === 1) ? rand(10, a - 1) : rand(1, 9);
+    if (a === 10 && b === 10) b = rand(1, 9); // Safety guard agar tidak 0
+    q = `Berapa hasil dari ${a} - ${b}?`; 
+    ans = a - b;
+  } else if (level === 6) {
+    // Pengurangan ratusan dengan puluhan atau ratusan (Harus positif bulat)
+    let a = rand(100, 999);
+    let b = (rand(0, 1) === 1) ? rand(100, a - 1) : rand(10, 99);
+    q = `Berapa hasil dari ${a} - ${b}?`; 
+    ans = a - b;
+  } else if (level === 7) {
+    // Perkalian satuan dengan satuan
+    let a = rand(1, 9), b = rand(1, 9);
+    q = `Berapa hasil dari ${a} x ${b}?`; 
+    ans = a * b;
+  } else if (level === 8) {
+    // Perkalian puluhan dengan satuan atau puluhan
+    let a = rand(10, 99);
+    let b = (rand(0, 1) === 1) ? rand(10, 20) : rand(2, 9); // dibatasi pengali agar tidak terlalu besar manual
+    q = `Berapa hasil dari ${a} x ${b}?`; 
+    ans = a * b;
+  } else if (level === 9) {
+    // Perkalian ratusan dengan puluhan atau ratusan
+    let a = rand(100, 499);
+    let b = (rand(0, 1) === 1) ? rand(10, 20) : rand(100, 150); // dibatasi agar masuk akal dihitung manual
+    q = `Berapa hasil dari ${a} x ${b}?`; 
+    ans = a * b;
+  } else if (level === 10) {
+    // Pembagian puluhan dengan satuan serta hasilnya bilangan satuan (Harus bulat positif)
+    let ans_temp = rand(1, 9); // Hasil harus satuan
+    let b = rand(2, 9);        // Pembagi satuan
+    let a = b * ans_temp;      // Angka yang dibagi (harus puluhan: 10-99)
+    while (a < 10 || a > 99) {
+      ans_temp = rand(1, 9);
+      b = rand(2, 9);
+      a = b * ans_temp;
+    }
+    q = `Berapakah hasil dari ${a} : ${b}?`; 
+    ans = ans_temp;
+  } else if (level === 11) {
+    // Pembagian ratusan dengan satuan atau puluhan serta hasilnya bilangan satuan atau puluhan (Harus bulat positif)
+    let ans_temp = (rand(0, 1) === 1) ? rand(1, 9) : rand(10, 99); // Hasil satuan atau puluhan
+    let b = (rand(0, 1) === 1) ? rand(2, 9) : rand(10, 99);        // Pembagi satuan atau puluhan
+    let a = b * ans_temp;                                         // Angka yang dibagi (harus ratusan: 100-999)
+    while (a < 100 || a > 999) {
+      ans_temp = (rand(0, 1) === 1) ? rand(1, 9) : rand(10, 99);
+      b = (rand(0, 1) === 1) ? rand(2, 9) : rand(10, 99);
+      a = b * ans_temp;
+    }
+    q = `Berapakah hasil dari ${a} : ${b}?`; 
+    ans = ans_temp;
+  } else if (level === 12) {
+    // Pembagian ribuan dengan satuan atau puluhan serta hasilnya bilangan puluhan atau ratusan (Harus bulat positif)
+    let ans_temp = (rand(0, 1) === 1) ? rand(10, 99) : rand(100, 999); // Hasil puluhan atau ratusan
+    let b = (rand(0, 1) === 1) ? rand(2, 9) : rand(10, 99);             // Pembagi satuan atau puluhan
+    let a = b * ans_temp;                                              // Angka yang dibagi (harus ribuan: 1000-9999)
+    while (a < 1000 || a > 9999) {
+      ans_temp = (rand(0, 1) === 1) ? rand(10, 99) : rand(100, 999);
+      b = (rand(0, 1) === 1) ? rand(2, 9) : rand(10, 99);
+      a = b * ans_temp;
+    }
+    q = `Berapakah hasil dari ${a} : ${b}?`; 
+    ans = ans_temp;
+  } else if (level === 13) {
+    // Operasi campuran dengan angka satuan (kabataku)
+    let a = rand(2, 9), b = rand(2, 9), c = rand(2, 9);
+    let isTypeA = rand(0, 1) === 1;
+    if (isTypeA) {
+      q = `Berapa hasil dari ${a} x ${b} + ${c}?`;
+      ans = (a * b) + c;
+    } else {
+      q = `Berapa hasil dari ${a} + ${b} x ${c}? (Ingat urutan Kabataku)`;
+      ans = a + (b * c);
+    }
+  } else if (level === 14) {
+    // Operasi campuran dengan angka satuan dan puluhan
+    let a = rand(10, 30), b = rand(2, 9), c = rand(10, 25);
+    let isTypeA = rand(0, 1) === 1;
+    if (isTypeA) {
+      q = `Berapa hasil dari ${a} x ${b} - ${c}?`;
+      ans = (a * b) - c;
+    } else {
+      let aSatuan = rand(2, 9), bSatuan = rand(2, 9);
+      q = `Berapa hasil dari (${a} + ${aSatuan}) x ${bSatuan}?`;
+      ans = (a + aSatuan) * bSatuan;
+    }
+  } else if (level === 15) {
+    // BOSS: Operasi campuran dengan angka satuan, puluhan dan ratusan
+    let a = rand(100, 200), b = rand(10, 50), c = rand(2, 5), d = rand(10, 100);
+    q = `BOS: Berapa hasil dari (${a} + ${b}) x ${c} - ${d}?`;
+    ans = ((a + b) * c) - d;
+  } else if (level === 16) {
+    // Level 16: Penjumlahan bilangan bulat satuan/puluhan + satuan/puluhan
+    let a = rand(-99, 99);
+    let b = rand(-99, 99);
+    q = `Berapa hasil dari ${a} + ${b < 0 ? '('+b+')' : b}?`;
+    ans = a + b;
+  } else if (level === 17) {
+    // Level 17: Penjumlahan bilangan bulat soal cerita singkat
+    let a = rand(-30, 30);
+    let b = rand(-25, 25);
+    if (b === 0) b = 5;
+    let action = b > 0 ? "naik" : "turun";
+    q = `Suhu awal di sebuah laboratorium uji coba adalah ${a}°C. Kemudian suhu ${action} sebesar ${Math.abs(b)}°C. Berapa suhu ruangan tersebut sekarang?`;
+    ans = a + b;
+  } else if (level === 18) {
+    // Level 18: Pengurangan bilangan bulat satuan/puluhan - satuan/puluhan
+    let a = rand(-99, 99);
+    let b = rand(-99, 99);
+    q = `Berapa hasil dari ${a} - ${b < 0 ? '('+b+')' : b}?`;
+    ans = a - b;
+  } else if (level === 19) {
+    // Level 19: Pengurangan bilangan bulat soal cerita singkat
+    let a = rand(10, 50);
+    let b = rand(-50, -10); // nilai negatif mencerminkan kedalaman
+    q = `Seekor helikopter terbang pada ketinggian ${a} m di atas permukaan laut. Tepat di bawahnya, sebuah kapal selam berada pada kedalaman ${Math.abs(b)} m di bawah laut (posisi ${b} m). Berapa selisih jarak antara helikopter dan kapal selam tersebut?`;
+    ans = a - b;
+  } else if (level === 20) {
+    // Level 20: Perkalian bilangan bulat satuan/puluhan x satuan/puluhan
+    let a = rand(-30, 30);
+    let b = rand(-30, 30);
+    if (a === 0) a = -2;
+    if (b === 0) b = 4;
+    q = `Berapa hasil dari ${a} x ${b < 0 ? '('+b+')' : b}?`;
+    ans = a * b;
+  } else if (level === 21) {
+    // Level 21: Perkalian bilangan bulat soal cerita singkat
+    let a = rand(-15, -2); // poin pengurangan (negatif)
+    let b = rand(2, 9); // jumlah pengali
+    q = `Dalam sebuah kompetisi, setiap pelanggaran akan diberi poin ${a}. Jika tim Anda melakukan pelanggaran sebanyak ${b} kali, berapakah total poin yang Anda peroleh dari pelanggaran tersebut?`;
+    ans = a * b;
+  } else if (level === 22) {
+    // Level 22: Pembagian bilangan bulat puluhan/ratusan : satuan/puluhan
+    let b = rand(-30, 30);
+    if (b === 0) b = -5;
+    let ans_temp = rand(-40, 40);
+    let a = b * ans_temp;
+    while (Math.abs(a) < 10) {
+      ans_temp = rand(-40, 40);
+      a = b * ans_temp;
+    }
+    q = `Berapakah hasil dari ${a} : ${b < 0 ? '('+b+')' : b}?`;
+    ans = ans_temp;
+  } else if (level === 23) {
+    // Level 23: Pembagian bilangan bulat soal cerita singkat
+    let b = rand(2, 10);
+    let ans_temp = rand(-50, -10);
+    let a = b * ans_temp;
+    q = `Sebuah koperasi dagang mengalami kerugian sehingga total kasnya berubah menjadi ${a} rupiah. Jika kerugian tersebut ditanggung sama rata oleh ${b} anggotanya, berapa perubahan saldo yang dialami masing-masing anggota?`;
+    ans = ans_temp;
+  } else if (level === 24) {
+    // Level 24: Operasi campuran bilangan bulat satuan, puluhan
+    let a = rand(-20, 20);
+    let b = rand(-15, 15);
+    let c = rand(-40, 40);
+    let isTypeA = rand(0, 1) === 1;
+    if (isTypeA) {
+      q = `Berapa hasil dari ${a} x ${b < 0 ? '('+b+')' : b} + ${c < 0 ? '('+c+')' : c}?`;
+      ans = (a * b) + c;
+    } else {
+      q = `Berapa hasil dari ${a < 0 ? '('+a+')' : a} - ${b < 0 ? '('+b+')' : b} x ${c < 0 ? '('+c+')' : c}?`;
+      ans = a - (b * c);
+    }
+  } else if (level === 25) {
+    // Level 25: Operasi campuran bilangan bulat soal cerita
+    let a = rand(-5, 15);
+    let b = rand(-8, -2);
+    let c = rand(2, 6);
+    q = `MINI BOSS: Suhu udara di puncak gunung pada pukul 06.00 adalah ${a}°C. Menjelang malam badai tiba dan suhu berubah sebesar ${b}°C (turun) setiap jam. Berapakah suhu udara di puncak tersebut setelah ${c} jam berlalu?`;
+    ans = a + (b * c);
+  } else if (level === 26) {
+    // Pecahan Dinamis (Penjumlahan)
+    let d1 = rand(2, 6), d2 = rand(2, 6);
+    let n1 = rand(1, d1 - 1), n2 = rand(1, d2 - 1);
+    q = `Jembatan Pecahan: ${n1}/${d1} + ${n2}/${d2} = ... ?`;
+    let num = n1 * d2 + n2 * d1;
+    let den = d1 * d2;
+    ans = simplify(num, den);
+    options = makeUniqueOptions(ans, simplify(num + 1, den), simplify(Math.max(1, num - 1), den), simplify(num + 2, den));
+  } else if (level === 27) {
+    // Pecahan Dinamis (Pengurangan)
+    let d1 = rand(2, 6), d2 = rand(2, 6);
+    let n1 = rand(1, d1 - 1), n2 = rand(1, d2 - 1);
+    if (n1 * d2 <= n2 * d1) { n1 = d1 - 1; n2 = 1; d2 = Math.max(d2, 3); } 
+    q = `Potong Jembatan: ${n1}/${d1} - ${n2}/${d2} = ... ?`;
+    let num = n1 * d2 - n2 * d1;
+    let den = d1 * d2;
+    ans = simplify(num, den);
+    options = makeUniqueOptions(ans, simplify(num + 1, den), simplify(Math.max(1, num - 1), den), simplify(num + 2, den));
+  } else if (level === 28) {
+    // Pecahan Dinamis (Perkalian)
+    let d1 = rand(2, 5), d2 = rand(2, 5);
+    let n1 = rand(1, d1), n2 = rand(1, d2);
+    q = `Kebun Pecahan: ${n1}/${d1} x ${n2}/${d2} = ... ?`;
+    let num = n1 * n2;
+    let den = d1 * d2;
+    ans = simplify(num, den);
+    options = makeUniqueOptions(ans, simplify(num + 1, den), simplify(Math.max(1, num - 1), den), simplify(num + 2, den));
+  } else if (level === 29) {
+    // Pecahan Dinamis (Pembagian)
+    let d1 = rand(2, 5), d2 = rand(2, 5);
+    let n1 = rand(1, d1), n2 = rand(1, d2);
+    q = `Membagi Kebun: ${n1}/${d1} : ${n2}/${d2} = ... ?`;
+    let num = n1 * d2;
+    let den = d1 * n2;
+    ans = simplify(num, den);
+    options = makeUniqueOptions(ans, simplify(num + 1, den), simplify(Math.max(1, num - 1), den), simplify(num + 2, den));
+  } else if (level === 30) {
+    // Pecahan Dinamis (Campuran)
+    let ops = rand(0, 1);
+    if (ops === 0) {
+        let num1 = rand(1,2), den1 = 3, num2 = rand(1,2), den2 = 3, num3 = rand(1,3), den3 = 4;
+        q = `BOSS KRISTAL: (${num1}/${den1} + ${num2}/${den2}) x ${num3}/${den3} = ... (Sederhanakan)?`;
+        let numSum = num1*den2 + num2*den1, denSum = den1*den2;
+        ans = simplify(numSum * num3, denSum * den3);
+    } else {
+        let num1 = rand(1,3), den1 = 4, num2 = rand(1,2), den2 = 2, num3 = rand(1,2), den3 = 3;
+        q = `BOSS KRISTAL: ${num1}/${den1} : (${num2}/${den2} x ${num3}/${den3}) = ... (Sederhanakan)?`;
+        let numMult = num2*num3, denMult = den2*den3;
+        ans = simplify(num1 * denMult, den1 * numMult);
+    }
+    options = makeUniqueOptions(ans, simplify(1, 2), simplify(3, 4), simplify(1, 3));
+  } else if (level === 31) {
+    // Aljabar 1 Variabel (1 Suku koefisien > 1 atau 2 Suku koefisien 1)
+    let x = rand(5, 50);
+    let type = rand(0, 2);
+    if (type === 0) {
+      let a = rand(2, 9); // Koefisien > 1
+      let c = a * x;
+      q = `Pintu Terkunci: Jika ${a}x = ${c}, berapakah nilai x?`;
+      ans = x;
+    } else if (type === 1) {
+      let b = rand(2, 30);
+      let c = x + b;
+      q = `Buka Segel: Jika x + ${b} = ${c}, berapakah nilai x?`;
+      ans = x;
+    } else {
+      let b = rand(2, 30);
+      let c = x - b;
+      q = `Buka Segel: Jika x - ${b} = ${c}, berapakah nilai x?`;
+      ans = x;
+    }
+  } else if (level === 32) {
+    // Aljabar 1 Variabel (2 Suku koefisien != 1)
+    let a = rand(2, 9);
+    let x = rand(2, 20);
+    let b = rand(2, 20);
+    let type = rand(0, 1);
+    if (type === 0) {
+      let c = a * x + b;
+      q = `Retas Sirkuit: Jika ${a}x + ${b} = ${c}, berapakah nilai x?`;
+      ans = x;
+    } else {
+      let c = a * x - b;
+      q = `Retas Sirkuit: Jika ${a}x - ${b} = ${c}, berapakah nilai x?`;
+      ans = x;
+    }
+  } else if (level === 33) {
+    // Perbandingan Senilai Dinamis (Level 33)
+    let items = [["kristal penyembuh", "keping emas"], ["gulungan sihir", "batu safir"], ["pedang perak", "koin perak"]];
+    let [itemA, itemB] = items[rand(0, 2)];
+    let a = rand(2, 5); 
+    let pricePerUnit = rand(3, 10);
+    let totalB1 = a * pricePerUnit; 
+    let multiplier = rand(2, 6);
+    let a2 = a + multiplier; 
+    q = `Pasar Gurun: Jika harga ${a} ${itemA} adalah ${totalB1} ${itemB}, berapakah harga untuk ${a2} ${itemA}?`;
+    ans = a2 * pricePerUnit;
+  } else if (level === 34) {
+    // Perbandingan Berbalik Nilai Dinamis (Level 34)
+    let entities = [["golem pembangun", "hari"], ["penyihir waktu", "jam"], ["unta pengangkut", "hari"]];
+    let [entA, entB] = entities[rand(0, 2)];
+    let p1 = rand(2, 6);
+    let w1 = rand(10, 24);
+    let totalWork = p1 * w1;
+    let possibleP2 = [];
+    for (let i = 2; i <= totalWork; i++) {
+        if (totalWork % i === 0 && i !== p1) possibleP2.push(i);
+    }
+    let p2 = possibleP2[rand(0, possibleP2.length - 1)];
+    q = `Oasis Waktu: Jika ${p1} ${entA} dapat menyelesaikan pekerjaan dalam ${w1} ${entB}, berapa ${entB} waktu yang dibutuhkan jika dikerjakan oleh ${p2} ${entA}?`;
+    ans = totalWork / p2;
+  } else if (level === 35) {
+    // Perbandingan Campuran Senilai & Berbalik Nilai Dinamis (Level 35)
+    if (rand(0, 1) === 0) {
+      // Skenario Senilai
+      let a = rand(3, 7);
+      let price = rand(4, 12);
+      let total = a * price;
+      let a2 = a + rand(2, 5);
+      q = `MINI BOSS (Perbandingan Senilai): Resep alkimia kuno membutuhkan ${total} tetes embun murni untuk meracik ${a} porsi ramuan. Berapa tetes embun yang dibutuhkan untuk membuat ${a2} porsi ramuan?`;
+      ans = a2 * price;
+    } else {
+      // Skenario Berbalik Nilai
+      let p1 = rand(3, 8);
+      let w1 = rand(12, 30);
+      let totalWork = p1 * w1;
+      let possibleP2 = [];
+      for (let i = 2; i <= totalWork; i++) {
+          if (totalWork % i === 0 && i !== p1 && i > p1) possibleP2.push(i);
+      }
+      if(possibleP2.length === 0) possibleP2 = [p1 * 2]; // Fallback genap ganda
+      let p2 = possibleP2[rand(0, possibleP2.length - 1)];
+      q = `MINI BOSS (Perbandingan Berbalik Nilai): Persediaan air suci di oasis cukup untuk ${p1} ksatria selama ${w1} hari. Jika jumlah ksatria bertambah menjadi ${p2}, dalam berapa hari persediaan air tersebut akan habis?`;
+      ans = totalWork / p2;
+    }
+  } else if (level === 36) {
+    // Persegi (Luas & Keliling - Level 36)
+    let s = rand(5, 25);
+    if (rand(0, 1) === 0) {
+      q = `Kamar Persegi: Hitunglah LUAS ubin lantai kamar yang berbentuk persegi dengan panjang sisi ${s} m!`;
+      ans = s * s;
+    } else {
+      q = `Kamar Persegi: Hitunglah KELILING dinding kamar persegi yang memiliki panjang sisi ${s} m untuk memasang pita perisai!`;
+      ans = 4 * s;
+    }
+  } else if (level === 37) {
+    // Persegi Panjang (Luas & Keliling - Level 37)
+    let p = rand(12, 30);
+    let l = rand(5, 11);
+    if (rand(0, 1) === 0) {
+      q = `Aula Persegi Panjang: Aula istana berbentuk persegi panjang berukuran panjang ${p} m dan lebar ${l} m. Berapakah LUAS karpet megah yang dapat menutupi seluruh lantainya?`;
+      ans = p * l;
+    } else {
+      q = `Aula Persegi Panjang: Aula istana berukuran panjang ${p} m dan lebar ${l} m. Berapakah KELILING aula tersebut untuk dijaga oleh prajurit?`;
+      ans = 2 * (p + l);
+    }
+  } else if (level === 38) {
+    // Segitiga Siku-Siku (Luas & Keliling - Level 38)
+    let triples = [[3,4,5], [5,12,13], [6,8,10], [9,12,15], [8,15,17]];
+    let [a, t, c] = triples[rand(0, triples.length - 1)];
+    let mult = rand(2, 6);
+    a *= mult; t *= mult; c *= mult;
+    if (rand(0, 1) === 0) {
+      q = `Menara Segitiga Siku-Siku: Jika panjang alas penopang ${a} m, tinggi menara ${t} m, dan sisi miring baja ${c} m, berapakah LUAS menara segitiga tersebut?`;
+      ans = (a * t) / 2;
+    } else {
+      q = `Menara Segitiga Siku-Siku: Jika panjang alas penopang ${a} m, tinggi menara ${t} m, dan sisi miring baja ${c} m, berapakah panjang KELILING penyangga luarnya?`;
+      ans = a + t + c;
+    }
+  } else if (level === 39) {
+    // Trapesium Sama Kaki (Luas & Keliling - Level 39)
+    let configs = [{a: 10, b: 20, t: 12, s: 13}, {a: 6, b: 14, t: 3, s: 5}, {a: 8, b: 24, t: 6, s: 10}];
+    let conf = configs[rand(0, configs.length - 1)];
+    let mult = rand(2, 5);
+    let a = conf.a * mult, b = conf.b * mult, t = conf.t * mult, s = conf.s * mult;
+    if (rand(0, 1) === 0) {
+      q = `Taman Trapesium Sama Kaki: Panjang dua sisi yang sejajar adalah ${a} m dan ${b} m. Jika tinggi taman ${t} m (dan sisi miring ${s} m), berapakah LUAS taman istana tersebut?`;
+      ans = ((a + b) * t) / 2;
+    } else {
+      q = `Taman Trapesium Sama Kaki: Panjang dua sisi yang sejajar adalah ${a} m dan ${b} m, dengan panjang dua sisi miring yang masing-masing ${s} m. Berapakah panjang KELILING pagar yang dibutuhkan?`;
+      ans = a + b + s + s;
+    }
+  } else if (level === 40) {
+    // Lingkaran (Luas & Keliling - Level 40)
+    let r = rand(2, 10) * 7; // multiple of 7 untuk menyederhanakan perhitungan pi
+    if (rand(0, 1) === 0) {
+      q = `FINAL BOSS: Kutukan Lingkaran! Radius (jari-jari) sihir singgasana adalah ${r} m. Untuk mematahkannya, sebutkan LUAS lingkaran sihir tersebut! (Gunakan π = 22/7)`;
+      ans = (22 * r * r) / 7;
+    } else {
+      q = `FINAL BOSS: Rantai Lingkaran! Radius (jari-jari) ruangan adalah ${r} m. Untuk memutusnya, sebutkan panjang KELILING rantai pelindung tersebut! (Gunakan π = 22/7)`;
+      ans = (2 * 22 * r) / 7;
+    }
+  }
+
+  // Jernihkan pilihan salah untuk Array Int & String (Skala Dinamis)
+  if (options.length === 0) {
+    let scale = 1;
+    if (ans > 100) scale = 10;
+    if (ans > 1000) scale = 100;
+    
+    let wrong1 = ans + rand(1, 4) * scale;
+    let wrong2 = ans - rand(1, 5) * scale;
+    let wrong3 = ans + rand(5, 9) * scale;
+
+    while (wrong1 === ans) wrong1 += 1 * scale;
+    while (wrong2 === ans || wrong2 === wrong1) wrong2 -= 1 * scale; 
+    while (wrong3 === ans || wrong3 === wrong1 || wrong3 === wrong2) wrong3 += 1 * scale;
+
+    options = [ans, wrong1, wrong2, wrong3];
+  }
+
+  return { question: q, answer: ans, options: shuffle(options) };
+};
+
+export default function App() {
+  const [currentPage, setCurrentPage] = useState('MAP'); // MAP, REGION, GAME
+  const [activeRegion, setActiveRegion] = useState(null);
+  const [activeLevel, setActiveLevel] = useState(null);
+  
+  // RPG State (Default diatur ke Ksatria Aritmatika)
+  const [hero, setHero] = useState(AVATARS[0]); 
+  const [gold, setGold] = useState(100);
+  const [xp, setXp] = useState(0);
+  const [levelStats, setLevelStats] = useState({}); 
+  const [maxUnlockedLevel, setMaxUnlockedLevel] = useState(1);
+  const [isShake, setIsShake] = useState(false);
+
+  // Challenge Arena State
+  const [questions, setQuestions] = useState([]);
+  const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [gameStatus, setGameStatus] = useState('playing'); // playing, won, lost
+  const [hearts, setHearts] = useState(3); 
+  const [enemyHealth, setEnemyHealth] = useState(100); 
+  const [currentEnemy, setCurrentEnemy] = useState({ name: "Slime", emoji: "🟩", desc: "" });
+
+  // Fungsi Mandiri Memulai/Mengulang Pertempuran Secara Bersih
+  const startNewBattle = (level) => {
+    setActiveLevel(level);
+    
+    const isBossLevel = level === 15 || level === 25 || level === 30 || level === 35 || level === 40;
+    if (isBossLevel) {
+      setCurrentEnemy({
+        name: ENEMIES.boss[level].name,
+        emoji: ENEMIES.boss[level].emoji,
+        desc: ENEMIES.boss[level].desc
+      });
+    } else {
+      const randomEnemy = ENEMIES.normal[rand(0, ENEMIES.normal.length - 1)];
+      setCurrentEnemy({
+        name: randomEnemy.name,
+        emoji: randomEnemy.emoji,
+        desc: "Monster liar penghadang jalan utama!"
+      });
+    }
+
+    const newQuestions = [];
+    for(let i = 0; i < 10; i++) {
+      newQuestions.push(generateQuestion(level));
+    }
+    setQuestions(newQuestions);
+    setCurrentQIndex(0);
+    setScore(0);
+    setHearts(3);
+    setEnemyHealth(100);
+    setGameStatus('playing');
+    setCurrentPage('GAME');
+    playSound('correct');
+  };
+
+  // Dapatkan Region Aktif Berdasarkan Level Unlocked
+  const getCurrentRegionId = () => {
+    if (maxUnlockedLevel <= 15) return 1;
+    if (maxUnlockedLevel <= 30) return 2;
+    if (maxUnlockedLevel <= 32) return 3;
+    if (maxUnlockedLevel <= 35) return 4;
+    return 5;
+  };
+
+  const getRankTitle = () => {
+    if (xp > 1500) return "Archmage Matematika 👑";
+    if (xp > 800) return "Slayer Monster 👾";
+    if (xp > 300) return "Petualang Terampil 🛡️";
+    return "Pemula Aritmatika 🌱";
+  };
+
+  const triggerShake = () => {
+    setIsShake(true);
+    setTimeout(() => setIsShake(false), 500);
+  };
+
+  const getWorldProgress = (region) => {
+    let completedCount = 0;
+    for (let i = region.min; i <= region.max; i++) {
+      if (levelStats[i]?.stars && levelStats[i].stars >= 1) completedCount++;
+    }
+    return `${completedCount}/${region.max - region.min + 1}`;
+  };
+
+  // --- HALAMAN 1: PETA DUNIA (WORLD MAP LANDSCAPE) ---
+  const Page1Map = () => {
+    const currentRegionId = getCurrentRegionId();
+
+    const handleLandmarkClick = (region) => {
+      const isUnlocked = maxUnlockedLevel >= region.min;
+      
+      if (isUnlocked) {
+        setActiveRegion(region);
+        setCurrentPage('REGION');
+        playSound('correct');
+      } else {
+        playSound('wrong');
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-[#072530] text-white font-sans relative overflow-hidden flex flex-col">
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes floatCloud {
+            0% { transform: translateX(-150px); }
+            100% { transform: translateX(100vw); }
+          }
+          @keyframes heroBounce {
+            0%, 100% { transform: translateY(0) scaleX(1); }
+            50% { transform: translateY(-16px) scaleX(0.95); }
+          }
+          @keyframes pulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.6)); }
+            50% { filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.95)); }
+          }
+          @keyframes marchDots {
+            to { stroke-dashoffset: -40; }
+          }
+          @keyframes rotateCompass {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes swayBoat {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-4px) rotate(3deg); }
+          }
+          @keyframes pinFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+          }
+          .animate-cloud-slow {
+            animation: floatCloud 55s linear infinite;
+          }
+          .animate-cloud-fast {
+            animation: floatCloud 32s linear infinite;
+          }
+          .animate-hero-bounce {
+            animation: heroBounce 1.5s ease-in-out infinite;
+          }
+          .animate-pulse-glow {
+            animation: pulseGlow 2s infinite;
+          }
+          .animate-march {
+            animation: marchDots 8s linear infinite;
+          }
+          .animate-compass {
+            animation: rotateCompass 40s linear infinite;
+          }
+          .animate-boat {
+            animation: swayBoat 3s ease-in-out infinite;
+          }
+          .animate-pin {
+            animation: pinFloat 1.8s ease-in-out infinite;
+          }
+        `}} />
+
+        {/* Elemen awan terapung */}
+        <div className="absolute top-16 left-0 text-6xl opacity-20 animate-cloud-slow pointer-events-none z-10 select-none">☁️</div>
+        <div className="absolute top-44 left-0 text-7xl opacity-15 animate-cloud-fast pointer-events-none z-10 select-none">☁️</div>
+        
+        {/* Header Utama */}
+        <header className="relative z-20 max-w-6xl mx-auto w-full pt-6 px-6 flex-shrink-0">
+          <div className="flex flex-col md:flex-row justify-between items-center bg-[#114b5f]/90 border-[4px] border-teal-800 rounded-3xl p-4 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-3 mb-3 md:mb-0">
+              <div className="w-12 h-12 bg-gradient-to-tr from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center text-3xl shadow-lg border-2 border-amber-300 animate-hero-bounce">
+                {hero.emoji}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-lg text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-amber-400">{hero.name}</span>
+                  <span className="text-[10px] bg-amber-500/25 border border-amber-500/50 text-amber-300 px-2 py-0.5 rounded-full font-bold">LV. {Math.floor(xp/200) + 1}</span>
+                </div>
+                <p className="text-xs text-slate-300 font-medium">Gelar: <span className="text-teal-300 font-bold">{getRankTitle()}</span></p>
+              </div>
+            </div>
+            
+            {/* Bar Statistik */}
+            <div className="flex gap-4 md:gap-6 bg-slate-950/60 px-4 py-2 rounded-xl border-2 border-teal-800 text-sm">
+              <div className="text-center">
+                <span className="block text-[9px] text-slate-400 font-bold uppercase">EXP</span>
+                <span className="font-black text-blue-300">{xp} XP</span>
+              </div>
+              <div className="w-px h-8 bg-teal-800"></div>
+              <div className="text-center">
+                <span className="block text-[9px] text-slate-400 font-bold uppercase">Emas</span>
+                <span className="font-black text-amber-300">🪙 {gold}</span>
+              </div>
+              <div className="w-px h-8 bg-teal-800"></div>
+              <div className="text-center">
+                <span className="block text-[9px] text-slate-400 font-bold uppercase">Misi Selesai</span>
+                <span className="font-black text-teal-300">
+                  {Object.keys(levelStats).filter(l => levelStats[l]?.stars >= 1).length}/40
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pemilih Karakter */}
+          <div className="mt-3 flex gap-2 justify-center items-center">
+            <span className="text-xs text-slate-400">Ganti Avatar Hero:</span>
+            {AVATARS.map(av => (
+              <button 
+                key={av.id}
+                onClick={() => { setHero(av); playSound('correct'); }}
+                className={`px-3 py-1 rounded-lg border-2 text-xs font-bold flex items-center gap-1 transition-all ${hero.id === av.id ? 'bg-amber-500 border-amber-300 text-slate-950 scale-105 shadow-md' : 'bg-slate-900/80 border-teal-800 hover:border-teal-600'}`}
+              >
+                <span>{av.emoji}</span>
+                <span>{av.name.split(' ')[0]}</span>
+              </button>
+            ))}
+          </div>
+        </header>
+
+        {/* --- PANEL UTAMA PETUALANGAN --- */}
+        <main className="relative z-10 flex-grow max-w-7xl mx-auto w-full px-6 py-4 flex flex-col justify-center">
+          
+          <div className="text-center mb-4 flex-shrink-0">
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white via-slate-100 to-slate-400">
+              PETA PETUALANGAN NUMERIKA
+            </h1>
+            <p className="text-xs text-slate-300 mt-1">Klik langsung pulau lokasi di peta untuk memulai misi tantangan!</p>
+          </div>
+
+          {/* KANVAS PETA UTAMA KARTUN INTERAKTIF */}
+          <div className="relative w-full flex-grow min-h-[480px] border-[12px] border-[#114b5f] bg-[#008f8c]/40 rounded-[3rem] overflow-hidden shadow-[0_16px_30px_rgba(0,0,0,0.5),_inset_0_4px_16px_rgba(255,255,255,0.2)]">
+            
+            <div className="absolute inset-0 opacity-15 pointer-events-none select-none" style={{
+              backgroundImage: 'radial-gradient(#14b8a6 1px, transparent 1px)',
+              backgroundSize: '2rem 2rem'
+            }}></div>
+
+            {/* Kompas Kuno */}
+            <div className="absolute bottom-6 left-6 opacity-10 pointer-events-none z-0 text-7xl md:text-8xl animate-compass select-none">
+              🧭
+            </div>
+
+            {/* Kapal Layar dan Monster Laut */}
+            <div className="absolute top-[55%] left-[25%] text-3xl opacity-35 animate-boat pointer-events-none z-0 select-none">
+              ⛵
+            </div>
+            <div className="absolute bottom-[22%] left-[64%] text-4xl opacity-15 pointer-events-none z-0 select-none animate-pulse">
+              🦑
+            </div>
+
+            {/* Jalur Penghubung SVG Presisi Antarpulau */}
+            <svg 
+              viewBox="0 0 100 100" 
+              preserveAspectRatio="none" 
+              className="absolute inset-0 w-full h-full pointer-events-none z-0" 
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <linearGradient id="pathGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#84cc16" />
+                  <stop offset="25%" stopColor="#a855f7" />
+                  <stop offset="50%" stopColor="#0ea5e9" />
+                  <stop offset="75%" stopColor="#fbbf24" />
+                  <stop offset="100%" stopColor="#f43f5e" />
+                </linearGradient>
+              </defs>
+              
+              <path 
+                d="M 18 72 Q 26 50 34 38 Q 44 52 54 66 Q 64 49 74 32 Q 82 25 90 18" 
+                fill="none" 
+                stroke="#114b5f" 
+                strokeWidth="4" 
+                strokeLinecap="round"
+              />
+
+              <path 
+                d="M 18 72 Q 26 50 34 38 Q 44 52 54 66 Q 64 49 74 32 Q 82 25 90 18" 
+                fill="none" 
+                stroke="url(#pathGradient)" 
+                strokeWidth="1.8" 
+                strokeLinecap="round" 
+                strokeDasharray="2, 2"
+              />
+
+              <path 
+                d="M 18 72 Q 26 50 34 38 Q 44 52 54 66 Q 64 49 74 32 Q 82 25 90 18" 
+                fill="none" 
+                stroke="#ffffff" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeDasharray="1, 15"
+                className="animate-march"
+                opacity="0.8"
+              />
+            </svg>
+
+            {/* Tampilkan Pulau-Pulau Terapung */}
+            {REGIONS.map((region) => {
+              const isUnlocked = maxUnlockedLevel >= region.min;
+              const currentRegionId = getCurrentRegionId();
+              const isActive = currentRegionId === region.id;
+
+              return (
+                <div 
+                  key={region.id}
+                  style={{ left: region.posX, top: region.posY }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 z-10 group"
+                >
+                  {/* Pin Peta Aktif */}
+                  {isActive && (
+                    <div className="absolute -top-[70px] left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-none select-none">
+                      <div className="animate-pin filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.3)]">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="#ea580c"/>
+                          <circle cx="12" cy="9" r="2.5" fill="#ffffff" />
+                        </svg>
+                      </div>
+                      <span className="bg-[#ea580c] text-white font-black text-[8px] uppercase px-2 py-0.5 rounded-full shadow-lg border border-orange-400 tracking-wider mt-1 whitespace-nowrap">
+                        Misi Aktif
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Pengendali Pulau Kartun */}
+                  <button
+                    onClick={() => handleLandmarkClick(region)}
+                    className={`
+                      relative w-24 h-24 md:w-28 md:h-28 rounded-full flex flex-col items-center justify-center transition-all duration-500
+                      border-[5px] ${region.shoreColor} shadow-[0_8px_0_0_#1e293b]
+                      ${isUnlocked 
+                        ? `${region.groundColor} hover:scale-110 cursor-pointer` 
+                        : 'bg-slate-900 border-slate-700 opacity-60 cursor-not-allowed'}
+                      ${isActive ? 'ring-4 ring-amber-400/80 animate-pulse-glow' : ''}
+                    `}
+                  >
+                    <div className="absolute inset-[1px] rounded-full border-[3px] border-black/10 pointer-events-none"></div>
+
+                    <div className="absolute inset-0 flex justify-around items-center opacity-30 pointer-events-none select-none">
+                      {region.deco.map((dec, i) => (
+                        <span key={i} className={`text-sm ${i === 0 ? 'mt-1' : i === 1 ? 'mb-2' : 'mt-2'}`}>{dec}</span>
+                      ))}
+                    </div>
+
+                    <div className="text-4xl md:text-5xl drop-shadow-[0_4px_3px_rgba(0,0,0,0.3)] z-10 transition-transform duration-300 group-hover:scale-115">
+                      {isUnlocked ? region.icon : "🔒"}
+                    </div>
+
+                    <span className="absolute bottom-[-16px] flex flex-col items-center bg-[#114b5f] border-2 border-teal-800 px-3 py-1 rounded-2xl text-[9px] font-black tracking-wide text-slate-100 shadow-[0_4px_0_0_#072530] z-20 whitespace-nowrap transition-transform group-hover:translate-y-[-2px]">
+                      <span className="uppercase">{region.name}</span>
+                      {isUnlocked ? (
+                        <span className="text-[8px] text-amber-300 font-bold mt-0.5">Lv. {region.min}-{region.max}</span>
+                      ) : (
+                        <span className="text-[8px] text-red-400 font-bold mt-0.5">TERKUNCI</span>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+
+          </div>
+
+          {/* Tombol Rahasia Guru */}
+          <div className="text-center mt-6 flex-shrink-0">
+            <button 
+              onClick={() => { setMaxUnlockedLevel(40); playSound('victory'); }} 
+              className="bg-slate-900/80 hover:bg-slate-800 text-xs text-amber-400 hover:text-amber-300 border-2 border-teal-800 px-4 py-1.5 rounded-full font-bold tracking-wide transition-all shadow-md"
+            >
+              🔓 [Mode Guru] Buka Semua Jalur Lanskap Petualangan
+            </button>
+          </div>
+        </main>
+
+        <footer className="text-center py-4 text-[10px] text-slate-500 border-t border-teal-950 mt-auto flex-shrink-0">
+          Edisi Petualangan Lanskap Numerika SMP • Terinspirasi oleh Desain Kartun RPG Interaktif.
+        </footer>
+      </div>
+    );
+  };
+
+  // --- HALAMAN 2: PETA LEVEL (REGION MAP) ---
+  const Page2Region = () => {
+    const levels = [];
+    for (let i = activeRegion.min; i <= activeRegion.max; i++) {
+      levels.push(i);
+    }
+
+    return (
+      <div className={`min-h-screen bg-gradient-to-b ${activeRegion.theme} text-white p-6 font-sans flex flex-col relative`}>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
+        
+        <div className="max-w-5xl mx-auto w-full flex-grow relative z-10">
+          
+          <div className="flex justify-between items-center mb-8 bg-black/40 p-4 rounded-2xl backdrop-blur-md border border-white/5">
+            <button 
+              onClick={() => { setCurrentPage('MAP'); playSound('correct'); }}
+              className="flex items-center gap-2 text-xs font-bold bg-white/10 hover:bg-white/20 hover:scale-105 border border-white/10 px-4 py-2 rounded-xl transition-all"
+            >
+              ⬅ Kembali ke Peta Utama
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{activeRegion.icon}</span>
+              <div>
+                <h4 className="text-sm font-bold">{activeRegion.name}</h4>
+                <p className="text-[10px] text-slate-300">Level Terbuka: {maxUnlockedLevel}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center mb-10">
+            <h1 className="text-4xl md:text-5xl font-black mb-2 drop-shadow-md tracking-wide">
+              {activeRegion.name}
+            </h1>
+            <p className="text-sm text-slate-300 max-w-md mx-auto">
+              Pilih misi tantangan di bawah. Kalahkan monster penjaga jalur untuk melanjutkan petualangan ke dimensi berikutnya!
+            </p>
+          </div>
+
+          <div className="bg-slate-950/60 border border-white/5 rounded-3xl p-8 backdrop-blur-md max-w-3xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {levels.map((lvl) => {
+                const isUnlocked = lvl <= maxUnlockedLevel;
+                const isBoss = lvl === 15 || lvl === 25 || lvl === 30 || lvl === 35 || lvl === 40;
+                const isMiniBoss = lvl === 25 || lvl === 35;
+                const stars = levelStats[lvl]?.stars || 0;
+
+                return (
+                  <div 
+                    key={lvl}
+                    className={`relative rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between h-40
+                      ${isUnlocked 
+                        ? 'bg-slate-900/90 border-slate-700/50 hover:border-amber-500/50 shadow-lg hover:shadow-xl hover:scale-[1.03] cursor-pointer' 
+                        : 'bg-slate-950/80 border-slate-900 opacity-40 cursor-not-allowed'}`}
+                    onClick={() => isUnlocked && startNewBattle(lvl)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className={`text-xs font-black px-2 py-1 rounded-lg ${isUnlocked ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-slate-400'}`}>
+                        STAGE {lvl}
+                      </span>
+                      
+                      {isBoss ? (
+                        <span className="text-xs bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 rounded-md font-bold animate-pulse">
+                          ⚠️ BOSS
+                        </span>
+                      ) : isMiniBoss ? (
+                        <span className="text-xs bg-orange-500/20 text-orange-300 border border-orange-500/40 px-2 py-0.5 rounded-md font-bold">
+                          ☠️ MINI
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="my-2">
+                      <h4 className="text-sm font-extrabold truncate text-slate-100">
+                        {isUnlocked ? LEVEL_NAMES[lvl] : "🔐 Dimensi Terkunci"}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {isUnlocked ? "Tantangan 10 Pertanyaan" : "Selesaikan stage sebelumnya"}
+                      </p>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-slate-800 pt-2">
+                      {isUnlocked ? (
+                        <div className="flex gap-1">
+                          {[1, 2, 3].map((sIndex) => (
+                            <span 
+                              key={sIndex} 
+                              className={`text-sm ${sIndex <= stars ? 'text-amber-400 drop-shadow-glow' : 'text-slate-600'}`}
+                            >
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-600 flex items-center gap-1">
+                          🔒 Terkunci
+                        </span>
+                      )}
+
+                      {isUnlocked && (
+                        <span className="text-[10px] text-amber-400 font-extrabold group-hover:underline">
+                          TANTANG ➔
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
+  // --- HALAMAN 3: ARENA TANTANGAN (BATTLE ARENA) ---
+  const Page3Game = () => {
+    const handleAnswer = (selectedOption) => {
+      if (gameStatus !== 'playing') return;
+
+      const currentQ = questions[currentQIndex];
+      const isCorrect = selectedOption === currentQ.answer;
+      
+      let nextScore = score;
+      if (isCorrect) {
+        nextScore = score + 1;
+        setScore(nextScore);
+        playSound('correct');
+        setEnemyHealth(h => Math.max(0, h - 10));
+      } else {
+        playSound('wrong');
+        triggerShake();
+      }
+
+      // Evaluasi langsung pengurangan hati
+      let nextHearts = hearts;
+      if (!isCorrect) {
+        nextHearts = hearts - 1;
+        setHearts(nextHearts);
+        if (nextHearts <= 0) {
+          setGameStatus('lost');
+          playSound('defeat');
+          return; // Hentikan langsung jika hero kehabisan nyawa
+        }
+      }
+
+      if (currentQIndex < 9) {
+        setCurrentQIndex(i => i + 1);
+      } else {
+        evaluateGameEnd(nextScore);
+      }
+    };
+
+    const evaluateGameEnd = (finalScore) => {
+      if (finalScore >= 7) {
+        setGameStatus('won');
+        playSound('victory');
+        
+        let starsGained = 1;
+        if (finalScore === 10) starsGained = 3;
+        else if (finalScore >= 8) starsGained = 2;
+
+        const goldReward = finalScore * 10;
+        const xpReward = finalScore * 15;
+        setGold(g => g + goldReward);
+        setXp(x => x + xpReward);
+
+        setLevelStats(prev => {
+          const currentBestStars = prev[activeLevel]?.stars || 0;
+          return {
+            ...prev,
+            [activeLevel]: {
+              stars: Math.max(currentBestStars, starsGained),
+              highScore: Math.max(prev[activeLevel]?.highScore || 0, finalScore)
+            }
+          };
+        });
+
+        if (activeLevel === maxUnlockedLevel && activeLevel < 40) {
+          setMaxUnlockedLevel(activeLevel + 1);
+        }
+      } else {
+        setGameStatus('lost');
+        playSound('defeat');
+      }
+    };
+
+    const currentQ = questions[currentQIndex];
+    const isBoss = activeLevel === 15 || activeLevel === 25 || activeLevel === 30 || activeLevel === 35 || activeLevel === 40;
+
+    return (
+      <div className={`min-h-screen bg-slate-950 text-white font-sans flex items-center justify-center p-4 relative overflow-hidden ${isShake ? 'animate-shake' : ''}`}>
+        
+        {/* Dekorasi Latar Belakang pointer-events-none agar tidak menghalangi tombol klik */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${activeRegion?.theme || 'from-slate-900 to-slate-950'} opacity-20 pointer-events-none`}></div>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.05),transparent_60%)] pointer-events-none"></div>
+
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
+            20%, 40%, 60%, 80% { transform: translateX(8px); }
+          }
+          .animate-shake {
+            animation: shake 0.4s ease-in-out;
+          }
+        `}} />
+
+        <div className="relative z-10 w-full max-w-4xl">
+          
+          <div className="flex justify-between items-center mb-6 bg-slate-900/80 border border-slate-800 p-4 rounded-2xl backdrop-blur-md">
+            <div>
+              <span className="text-xs font-bold text-amber-400 tracking-wider">STAGE {activeLevel} CHALLENGE</span>
+              <h2 className="text-xl font-black">{LEVEL_NAMES[activeLevel]}</h2>
+            </div>
+            <button 
+              onClick={() => { setCurrentPage('REGION'); playSound('wrong'); }}
+              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+            >
+              🏳️ Mundur & Batalkan Misi
+            </button>
+          </div>
+
+          {gameStatus === 'playing' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              <div className="lg:col-span-4 bg-slate-900/90 border border-slate-800 rounded-3xl p-6 backdrop-blur-md flex flex-col justify-between">
+                
+                <div className="text-center p-4 bg-slate-950/50 rounded-2xl border border-slate-800/80 relative overflow-hidden">
+                  {isBoss && (
+                    <div className="absolute -top-5 -left-5 bg-red-600 text-white text-[9px] font-black uppercase py-6 px-12 rotate-[-45deg] tracking-wider animate-pulse pointer-events-none">
+                      BOSS BATTLE
+                    </div>
+                  )}
+                  <div className="text-6xl mb-2 drop-shadow-lg transform hover:scale-110 transition-transform duration-300">
+                    {currentEnemy.emoji}
+                  </div>
+                  <h4 className="text-lg font-black text-red-400">{currentEnemy.name}</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic">{currentEnemy.desc}</p>
+                  
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-slate-400">BOSS HP</span>
+                      <span className="text-red-400">{enemyHealth}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden border border-slate-700 p-[1px]">
+                      <div 
+                        className="bg-gradient-to-r from-red-500 via-orange-500 to-red-600 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${enemyHealth}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="my-4 border-t border-slate-800/80"></div>
+
+                <div className="text-center p-4 bg-slate-950/50 rounded-2xl border border-slate-800/80">
+                  <div className="text-5xl mb-2">{hero.emoji}</div>
+                  <h4 className="text-sm font-black text-emerald-400">{hero.name}</h4>
+                  
+                  <div className="flex justify-center gap-1.5 mt-3">
+                    {[1, 2, 3].map((heart) => (
+                      <span 
+                        key={heart} 
+                        className={`text-2xl transition-all duration-300 transform ${heart <= hearts ? 'scale-110 drop-shadow-glow' : 'opacity-20 scale-90 grayscale'}`}
+                      >
+                        ❤️
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Nyawa Tersisa</span>
+                </div>
+
+              </div>
+
+              <div className="lg:col-span-8 flex flex-col gap-4">
+                
+                <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl backdrop-blur-md flex justify-between items-center text-xs font-bold">
+                  <span className="bg-blue-600/20 text-blue-300 border border-blue-500/40 px-3 py-1.5 rounded-lg">
+                    PERTANYAAN {currentQIndex + 1} / 10
+                  </span>
+                  <span className="bg-green-600/20 text-green-300 border border-green-500/40 px-3 py-1.5 rounded-lg">
+                    SERANGAN BENAR: {score}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 border border-slate-800 p-8 rounded-3xl backdrop-blur-md flex-grow flex flex-col justify-between relative overflow-hidden min-h-[350px]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+
+                  <div className="text-center my-auto">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-4">Pecahkan Kode Sihir Kuno</span>
+                    <h3 className="text-3xl md:text-4xl font-extrabold tracking-wide text-white leading-relaxed select-none">
+                      {currentQ?.question}
+                    </h3>
+                  </div>
+
+                  {/* Penanganan aman dengan optional chaining (?.) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+                    {currentQ?.options?.map((opt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleAnswer(opt)}
+                        className="group relative bg-slate-950/80 hover:bg-gradient-to-r hover:from-amber-500 hover:to-orange-500 hover:text-slate-950 text-slate-100 text-lg md:text-xl font-black p-5 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] border border-slate-800 hover:border-amber-400 shadow-md hover:shadow-lg flex items-center justify-between"
+                      >
+                        <span className="bg-slate-900 group-hover:bg-amber-600/30 text-xs w-8 h-8 rounded-lg flex items-center justify-center font-bold text-amber-400 group-hover:text-amber-950 border border-slate-800 group-hover:border-amber-500 transition-colors">
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        <span className="flex-grow text-center">{opt}</span>
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity">⚡</span>
+                      </button>
+                    ))}
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          ) : (
+            /* HASIL AKHIR */
+            <div className="bg-slate-900/90 border border-slate-800 p-10 rounded-3xl shadow-2xl text-center backdrop-blur-md max-w-xl mx-auto relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none"></div>
+              
+              <div className="text-8xl mb-6 animate-bounce">
+                {gameStatus === 'won' ? '🏆' : '💀'}
+              </div>
+
+              <h2 className={`text-4xl font-black tracking-tight mb-2 ${gameStatus === 'won' ? 'text-green-400' : 'text-red-500'}`}>
+                {gameStatus === 'won' ? 'MISI BERHASIL!' : 'BATTLE OVER!'}
+              </h2>
+              
+              <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
+                {gameStatus === 'won' 
+                  ? "Selamat! Anda melumpuhkan monster penjaga sirkuit angka dan menyerap kekuatannya." 
+                  : "Darah Anda habis karena sengatan salah perhitungan! Pulihkan energi dan bersiap untuk menyerang kembali."}
+              </p>
+
+              <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-6 mb-8 max-w-sm mx-auto">
+                <span className="text-xs text-slate-500 font-bold block mb-1">TOTAL SKOR AKURASI</span>
+                <span className="text-3xl font-black text-white">{score} / 10 Soal Benar</span>
+                
+                {gameStatus === 'won' ? (
+                  <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-800">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Hadiah Emas</span>
+                      <span className="text-amber-400 font-black">+🪙 {score * 10} Emas</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Bonus XP</span>
+                      <span className="text-blue-400 font-black">+⭐ {score * 15} XP</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-400/80 font-semibold mt-3">Skor kelulusan minimal: 7/10 benar</p>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-4">
+                <button 
+                  onClick={() => { setCurrentPage('REGION'); playSound('correct'); }}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-6 py-3.5 rounded-xl font-bold transition-all text-sm border border-slate-700"
+                >
+                  Kembali ke Peta
+                </button>
+                
+                {gameStatus === 'won' ? (
+                  <button 
+                    onClick={() => {
+                      setCurrentPage('REGION');
+                      playSound('correct');
+                    }}
+                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-all text-sm shadow-lg shadow-emerald-500/20"
+                  >
+                    Buka Tahapan Selanjutnya ➔
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => startNewBattle(activeLevel)}
+                    className="bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-all text-sm shadow-lg shadow-red-500/20"
+                  >
+                    Coba Lagi Battle ↺
+                  </button>
+                )}
+              </div>
+
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // --- RENDERER UTAMA APP ---
+  return (
+    <>
+      {currentPage === 'MAP' && <Page1Map />}
+      {currentPage === 'REGION' && <Page2Region />}
+      {currentPage === 'GAME' && <Page3Game />}
+    </>
+  );
+}
+
